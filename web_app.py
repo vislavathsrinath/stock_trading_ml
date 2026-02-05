@@ -16,6 +16,9 @@ import os
 from data_fetcher import StockDataFetcher
 from data_preprocessing import StockDataPreprocessor
 from model_training import StockPredictor
+from trading_signals import SignalGenerator
+from alert_system import alert_manager
+from backtesting import Backtester
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +48,8 @@ class RealTimeTradingApp:
         self.preprocessor = StockDataPreprocessor()
         self.predictors = {}
         self.asset_data = {}
+        self.signal_generator = SignalGenerator()
+        self.backtester = Backtester()
 
         # Initialize predictors for each asset
         for category, assets in TRACKED_ASSETS.items():
@@ -165,6 +170,72 @@ class RealTimeTradingApp:
             logger.error(f"Error getting chart data for {symbol}: {e}")
             return {}
 
+    def generate_trading_signal(self, symbol):
+        """Generate trading signal for an asset."""
+        try:
+            if symbol not in self.predictors:
+                return {'error': f'No model available for {symbol}'}
+
+            # Get latest data
+            data = self.get_real_time_data(symbol)
+            if data.empty:
+                return {'error': 'No data available'}
+
+            # Generate ML-based signal
+            ml_signal = self.signal_generator.generate_signal_from_prediction(
+                self.predictors[symbol].predict_future(self.asset_data.get(symbol, data))
+            )
+
+            # Generate technical signal
+            tech_signal = self.signal_generator.generate_technical_signal(data)
+
+            # Combine signals
+            combined_signal = self.signal_generator.combine_signals(ml_signal, tech_signal)
+
+            return combined_signal.to_dict() if combined_signal else {'signal': 'HOLD', 'confidence': 0.5}
+
+        except Exception as e:
+            logger.error(f"Error generating signal for {symbol}: {e}")
+            return {'error': str(e)}
+
+    def run_backtest(self, symbol, strategy='ml', start_date=None, end_date=None):
+        """Run backtest for an asset."""
+        try:
+            # Get historical data
+            if not start_date:
+                start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+            if not end_date:
+                end_date = datetime.now().strftime('%Y-%m-%d')
+
+            data = self.fetcher.fetch_data(symbol, start_date, end_date)
+            if data.empty:
+                return {'error': 'No data available for backtesting'}
+
+            # Create strategy
+            if strategy == 'ml' and symbol in self.predictors:
+                backtest_strategy = MLTradingStrategy(self.predictors[symbol])
+            else:
+                # Use default technical strategy
+                from backtesting import TechnicalStrategy
+                backtest_strategy = TechnicalStrategy()
+
+            # Run backtest
+            results = self.backtester.run_backtest(data, backtest_strategy, initial_capital=10000)
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error running backtest for {symbol}: {e}")
+            return {'error': str(e)}
+
+    def get_alert_history(self, limit=50):
+        """Get alert history."""
+        try:
+            return alert_manager.get_alert_history(limit)
+        except Exception as e:
+            logger.error(f"Error getting alert history: {e}")
+            return []
+
 # Initialize the trading app
 trading_app = RealTimeTradingApp()
 
@@ -215,6 +286,57 @@ def predict_asset(symbol):
             return jsonify({'error': str(e)}), 500
     else:
         return jsonify({'error': 'No model available for this asset'}), 404
+
+@app.route('/api/signal/<symbol>')
+def get_trading_signal(symbol):
+    """API endpoint for trading signals."""
+    signal = trading_app.generate_trading_signal(symbol)
+    return jsonify(signal)
+
+@app.route('/api/backtest/<symbol>')
+def run_asset_backtest(symbol):
+    """API endpoint for backtesting."""
+    strategy = request.args.get('strategy', 'ml')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    results = trading_app.run_backtest(symbol, strategy, start_date, end_date)
+    return jsonify(results)
+
+@app.route('/api/alerts')
+def get_alerts():
+    """API endpoint for alert history."""
+    limit = int(request.args.get('limit', 50))
+    alerts = trading_app.get_alert_history(limit)
+    return jsonify(alerts)
+
+@app.route('/api/alerts/subscribe', methods=['POST'])
+def subscribe_alerts():
+    """API endpoint to subscribe to alerts."""
+    data = request.get_json()
+    channel = data.get('channel')  # 'email' or 'sms'
+    contact = data.get('contact')  # email address or phone number
+
+    if channel and contact:
+        alert_manager.add_subscriber(channel, contact)
+        return jsonify({'success': True, 'message': f'Subscribed to {channel} alerts'})
+    else:
+        return jsonify({'error': 'Missing channel or contact information'}), 400
+
+@app.route('/portfolio')
+def portfolio():
+    """Portfolio tracking page."""
+    return render_template('portfolio.html')
+
+@app.route('/backtest')
+def backtest_page():
+    """Backtesting page."""
+    return render_template('backtest.html', assets=TRACKED_ASSETS)
+
+@app.route('/alerts')
+def alerts_page():
+    """Alerts page."""
+    return render_template('alerts.html')
 
 def update_data_background():
     """Background task to update data periodically."""

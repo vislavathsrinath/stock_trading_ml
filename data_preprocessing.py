@@ -60,7 +60,7 @@ class StockDataPreprocessor:
 
     def add_technical_indicators(self, data):
         """
-        Add technical indicators as features.
+        Add comprehensive technical indicators as features.
 
         Args:
             data (pd.DataFrame): Cleaned stock data
@@ -77,10 +77,12 @@ class StockDataPreprocessor:
             df['SMA_5'] = df['Close'].rolling(window=5).mean()
             df['SMA_10'] = df['Close'].rolling(window=10).mean()
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
+            df['SMA_50'] = df['Close'].rolling(window=50).mean()
 
             # Exponential Moving Averages
             df['EMA_5'] = df['Close'].ewm(span=5).mean()
             df['EMA_10'] = df['Close'].ewm(span=10).mean()
+            df['EMA_20'] = df['Close'].ewm(span=20).mean()
 
             # Relative Strength Index (RSI)
             delta = df['Close'].diff()
@@ -94,20 +96,68 @@ class StockDataPreprocessor:
             ema_26 = df['Close'].ewm(span=26).mean()
             df['MACD'] = ema_12 - ema_26
             df['MACD_Signal'] = df['MACD'].ewm(span=9).mean()
+            df['MACD_Histogram'] = df['MACD'] - df['MACD_Signal']
 
             # Bollinger Bands
             sma_20 = df['Close'].rolling(window=20).mean()
             std_20 = df['Close'].rolling(window=20).std()
             df['BB_Upper'] = sma_20 + (std_20 * 2)
             df['BB_Lower'] = sma_20 - (std_20 * 2)
+            df['BB_Middle'] = sma_20
+            df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
 
-            # Price changes
+            # Stochastic Oscillator
+            low_14 = df['Low'].rolling(window=14).min()
+            high_14 = df['High'].rolling(window=14).max()
+            df['Stochastic_K'] = 100 * ((df['Close'] - low_14) / (high_14 - low_14))
+            df['Stochastic_D'] = df['Stochastic_K'].rolling(window=3).mean()
+
+            # Williams %R
+            df['Williams_R'] = -100 * ((high_14 - df['Close']) / (high_14 - low_14))
+
+            # Commodity Channel Index (CCI)
+            typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+            sma_tp = typical_price.rolling(window=20).mean()
+            mad_tp = typical_price.rolling(window=20).apply(lambda x: np.mean(np.abs(x - x.mean())))
+            df['CCI'] = (typical_price - sma_tp) / (0.015 * mad_tp)
+
+            # On Balance Volume (OBV)
+            df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'],
+                                np.where(df['Close'] < df['Close'].shift(1), -df['Volume'], 0)).cumsum()
+
+            # Chaikin Money Flow (CMF)
+            money_flow_multiplier = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low'])
+            money_flow_volume = money_flow_multiplier * df['Volume']
+            df['CMF'] = money_flow_volume.rolling(window=21).sum() / df['Volume'].rolling(window=21).sum()
+
+            # Average True Range (ATR)
+            high_low = df['High'] - df['Low']
+            high_close = np.abs(df['High'] - df['Close'].shift(1))
+            low_close = np.abs(df['Low'] - df['Close'].shift(1))
+            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            df['ATR'] = true_range.rolling(window=14).mean()
+
+            # Price changes and momentum
             df['Price_Change'] = df['Close'].pct_change()
             df['Price_Change_5'] = df['Close'].pct_change(5)
+            df['Price_Change_10'] = df['Close'].pct_change(10)
+            df['Momentum_5'] = df['Close'] / df['Close'].shift(5) - 1
+            df['Momentum_10'] = df['Close'] / df['Close'].shift(10) - 1
 
             # Volume indicators
             df['Volume_SMA_5'] = df['Volume'].rolling(window=5).mean()
+            df['Volume_SMA_10'] = df['Volume'].rolling(window=10).mean()
             df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA_5']
+            df['Volume_Change'] = df['Volume'].pct_change()
+
+            # Volatility indicators
+            df['Volatility_5'] = df['Close'].rolling(window=5).std()
+            df['Volatility_10'] = df['Close'].rolling(window=10).std()
+            df['Volatility_20'] = df['Close'].rolling(window=20).std()
+
+            # Price position within range
+            df['Price_Range_High'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+            df['Price_Range_Low'] = (df['High'] - df['Close']) / (df['High'] - df['Low'])
 
             # Drop NaN values created by rolling calculations
             df = df.dropna().reset_index(drop=True)
