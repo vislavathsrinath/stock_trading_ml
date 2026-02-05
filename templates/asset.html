@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ symbol }} - Trading Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        .asset-header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .price-display {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .price-change {
+            font-size: 1.2rem;
+            margin-top: 10px;
+        }
+        .price-up {
+            color: #28a745;
+        }
+        .price-down {
+            color: #dc3545;
+        }
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .metric-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .prediction-card {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .prediction-confidence {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .technical-indicators {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .indicator-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .signal-buy {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .signal-sell {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .signal-neutral {
+            color: #6c757d;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="fas fa-arrow-left me-2"></i>
+                Real-Time Trading Dashboard
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-primary me-3">{{ symbol }}</span>
+                <button class="btn btn-outline-primary" onclick="refreshData()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Asset Header -->
+        <div class="asset-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-0">{{ symbol }}</h1>
+                    <div class="price-display" id="currentPrice">$--.--</div>
+                    <div class="price-change" id="priceChange">--.-- (--.--%)</div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="mb-2">
+                        <small class="text-muted">Volume</small>
+                        <div class="fw-bold" id="volume">--</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Last Update</small>
+                        <div class="fw-bold" id="lastUpdate">--:--:--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prediction Card -->
+        <div class="prediction-card mb-4" id="predictionCard" style="display: none;">
+            <h4><i class="fas fa-brain me-2"></i>AI Prediction</h4>
+            <div class="prediction-confidence" id="predictionDirection">--</div>
+            <div>Confidence: <span id="predictionConfidence">--</span></div>
+            <small>Based on machine learning analysis</small>
+        </div>
+
+        <!-- Charts -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="chart-container">
+                    <h4><i class="fas fa-chart-line me-2"></i>Price History (90 Days)</h4>
+                    <canvas id="priceChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-bar me-2"></i>Volume</h5>
+                    <canvas id="volumeChart" height="250"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-area me-2"></i>Price Distribution</h5>
+                    <canvas id="distributionChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Indicators -->
+        <div class="technical-indicators mb-4">
+            <h4><i class="fas fa-cogs me-2"></i>Technical Indicators</h4>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card">
+                        <h6>RSI (14)</h6>
+                        <div class="indicator-value" id="rsi">--</div>
+                        <small id="rsi-signal" class="signal-neutral">Neutral</small>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card">
+                        <h6>MACD</h6>
+                        <div class="indicator-value" id="macd">--</div>
+                        <small id="macd-signal" class="signal-neutral">Neutral</small>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card">
+                        <h6>SMA (20)</h6>
+                        <div class="indicator-value" id="sma20">--</div>
+                        <small class="text-muted">Moving Average</small>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card">
+                        <h6>Volatility</h6>
+                        <div class="indicator-value" id="volatility">--%</div>
+                        <small class="text-muted">30-day</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="metric-card">
+                    <h6>52W High</h6>
+                    <div class="indicator-value" id="high52w">$--.--</div>
+                    <small class="text-muted">Highest</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="metric-card">
+                    <h6>52W Low</h6>
+                    <div class="indicator-value" id="low52w">$--.--</div>
+                    <small class="text-muted">Lowest</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="metric-card">
+                    <h6>Average Volume</h6>
+                    <div class="indicator-value" id="avgVolume">--</div>
+                    <small class="text-muted">30-day</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="metric-card">
+                    <h6>Market Cap</h6>
+                    <div class="indicator-value" id="marketCap">--</div>
+                    <small class="text-muted">If available</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let priceChart = null;
+        let volumeChart = null;
+        let distributionChart = null;
+        const symbol = '{{ symbol }}';
+
+        // Initialize charts
+        function initCharts() {
+            // Price Chart
+            const priceCtx = document.getElementById('priceChart').getContext('2d');
+            priceChart = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Price ($)',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+
+            // Volume Chart
+            const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+            volumeChart = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Volume',
+                        data: [],
+                        backgroundColor: 'rgba(40, 167, 69, 0.6)',
+                        borderColor: '#28a745',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+
+            // Distribution Chart
+            const distCtx = document.getElementById('distributionChart').getContext('2d');
+            distributionChart = new Chart(distCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Price Distribution',
+                        data: [],
+                        borderColor: '#fd7e14',
+                        backgroundColor: 'rgba(253, 126, 20, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update asset data
+        function updateAssetData() {
+            fetch(`/api/assets/${symbol}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current_price) {
+                        // Update price display
+                        document.getElementById('currentPrice').textContent = `$${data.current_price.toFixed(2)}`;
+
+                        // Update price change
+                        const changeElement = document.getElementById('priceChange');
+                        if (data.price_change_pct > 0) {
+                            changeElement.innerHTML = `<span class="price-up"><i class="fas fa-arrow-up me-1"></i>${data.price_change.toFixed(2)} (${data.price_change_pct.toFixed(2)}%)</span>`;
+                        } else if (data.price_change_pct < 0) {
+                            changeElement.innerHTML = `<span class="price-down"><i class="fas fa-arrow-down me-1"></i>${data.price_change.toFixed(2)} (${data.price_change_pct.toFixed(2)}%)</span>`;
+                        } else {
+                            changeElement.textContent = `${data.price_change.toFixed(2)} (${data.price_change_pct.toFixed(2)}%)`;
+                        }
+
+                        // Update volume and last update
+                        document.getElementById('volume').textContent = data.volume ? data.volume.toLocaleString() : '--';
+                        document.getElementById('lastUpdate').textContent = data.last_update ? new Date(data.last_update).toLocaleTimeString() : '--:--:--';
+
+                        // Update prediction
+                        if (data.prediction) {
+                            document.getElementById('predictionCard').style.display = 'block';
+                            document.getElementById('predictionDirection').textContent = data.prediction.direction;
+                            document.getElementById('predictionConfidence').textContent = data.prediction.confidence;
+
+                            // Style based on prediction
+                            const predElement = document.getElementById('predictionDirection');
+                            if (data.prediction.direction === 'UP') {
+                                predElement.style.color = '#28a745';
+                            } else {
+                                predElement.style.color = '#dc3545';
+                            }
+                        }
+                    }
+                })
+                .catch(error => console.error('Error updating asset data:', error));
+        }
+
+        // Update charts
+        function updateCharts() {
+            fetch(`/api/chart/${symbol}?days=90`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.dates && data.prices) {
+                        // Update price chart
+                        priceChart.data.labels = data.dates;
+                        priceChart.data.datasets[0].data = data.prices;
+                        priceChart.update();
+
+                        // Update volume chart
+                        if (data.volumes && data.volumes.length > 0) {
+                            volumeChart.data.labels = data.dates;
+                            volumeChart.data.datasets[0].data = data.volumes;
+                            volumeChart.update();
+                        }
+
+                        // Calculate and update distribution
+                        if (data.prices.length > 0) {
+                            const sortedPrices = [...data.prices].sort((a, b) => a - b);
+                            const distribution = [];
+                            const bins = 20;
+                            const minPrice = Math.min(...sortedPrices);
+                            const maxPrice = Math.max(...sortedPrices);
+                            const binSize = (maxPrice - minPrice) / bins;
+
+                            for (let i = 0; i < bins; i++) {
+                                const binStart = minPrice + (i * binSize);
+                                const binEnd = minPrice + ((i + 1) * binSize);
+                                const count = sortedPrices.filter(p => p >= binStart && p < binEnd).length;
+                                distribution.push(count);
+                            }
+
+                            distributionChart.data.labels = Array.from({length: bins}, (_, i) =>
+                                `$${(minPrice + (i * binSize)).toFixed(2)}`
+                            );
+                            distributionChart.data.datasets[0].data = distribution;
+                            distributionChart.update();
+                        }
+                    }
+                })
+                .catch(error => console.error('Error updating charts:', error));
+        }
+
+        // Calculate technical indicators
+        function calculateIndicators(data) {
+            if (!data.prices || data.prices.length < 20) return;
+
+            const prices = data.prices;
+            const volumes = data.volumes || [];
+
+            // RSI (simplified)
+            let gains = 0, losses = 0;
+            for (let i = 1; i < Math.min(prices.length, 15); i++) {
+                const change = prices[i] - prices[i-1];
+                if (change > 0) gains += change;
+                else losses -= change;
+            }
+            const avgGain = gains / 14;
+            const avgLoss = losses / 14;
+            const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+
+            document.getElementById('rsi').textContent = rsi.toFixed(2);
+            const rsiSignal = document.getElementById('rsi-signal');
+            if (rsi > 70) {
+                rsiSignal.textContent = 'Overbought';
+                rsiSignal.className = 'signal-sell';
+            } else if (rsi < 30) {
+                rsiSignal.textContent = 'Oversold';
+                rsiSignal.className = 'signal-buy';
+            } else {
+                rsiSignal.textContent = 'Neutral';
+                rsiSignal.className = 'signal-neutral';
+            }
+
+            // SMA 20
+            const sma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+            document.getElementById('sma20').textContent = `$${sma20.toFixed(2)}`;
+
+            // Volatility (30-day)
+            const returns = [];
+            for (let i = 1; i < prices.length; i++) {
+                returns.push((prices[i] - prices[i-1]) / prices[i-1]);
+            }
+            const volatility = Math.sqrt(returns.reduce((a, b) => a + b * b, 0) / returns.length) * 100;
+            document.getElementById('volatility').textContent = `${volatility.toFixed(2)}%`;
+
+            // 52-week high/low (approximated)
+            const high52w = Math.max(...prices);
+            const low52w = Math.min(...prices);
+            document.getElementById('high52w').textContent = `$${high52w.toFixed(2)}`;
+            document.getElementById('low52w').textContent = `$${low52w.toFixed(2)}`;
+
+            // Average volume
+            if (volumes.length > 0) {
+                const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+                document.getElementById('avgVolume').textContent = avgVol.toLocaleString();
+            }
+        }
+
+        // Refresh all data
+        function refreshData() {
+            updateAssetData();
+            updateCharts();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            refreshData();
+
+            // Auto-refresh every 2 minutes
+            setInterval(refreshData, 120000);
+        });
+    </script>
+</body>
+</html>
